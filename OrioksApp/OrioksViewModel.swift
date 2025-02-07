@@ -6,9 +6,8 @@ class OrioksViewModel: ObservableObject {
     @Published var token: String? = nil
     @Published var schedule: GroupSchedule? = nil
     @Published var errorMessage: String? = nil
-    // groupId будет установлен после сопоставления информации о студенте и списка групп
+    @Published var timetable: [String: [String]]? = nil
     @Published var groupId: String = ""
-    // Новое свойство для хранения информации о студенте
     @Published var studentInfo: Student? = nil
     
     init() {
@@ -18,6 +17,7 @@ class OrioksViewModel: ObservableObject {
             self.token = storedToken
             self.isAuthenticated = true
             self.fetchStudentInfo()
+            self.fetchTimetable()
         }
     }
     
@@ -32,6 +32,7 @@ class OrioksViewModel: ObservableObject {
                         KeychainHelper.standard.save(tokenData, service: "com.orioks.app", account: "userToken")
                     }
                     self.fetchStudentInfo()
+                    self.fetchTimetable()
                 case .failure(let error):
                     self.errorMessage = "Ошибка авторизации: \(error.localizedDescription)"
                 }
@@ -47,6 +48,7 @@ class OrioksViewModel: ObservableObject {
             KeychainHelper.standard.save(tokenData, service: "com.orioks.app", account: "userToken")
         }
         self.fetchStudentInfo()
+        self.fetchTimetable()
     }
     
     /// Запрос информации о студенте
@@ -59,9 +61,9 @@ class OrioksViewModel: ObservableObject {
                     self.studentInfo = student
                     // Далее сопоставляем группу (используя student.group)
                     self.fetchGroupsAndSetGroupId(for: student.group)
-                    self.errorMessage = "Информация получена"
+                    print("Информация получена \(student.group)")
                 case .failure(let error):
-                    self.errorMessage = "Ошибка получения информации о студенте: \(error.localizedDescription)"
+                    print("Ошибка получения информации о студенте: \(error.localizedDescription)")
                 }
             }
         }
@@ -74,8 +76,14 @@ class OrioksViewModel: ObservableObject {
             DispatchQueue.main.async {
                 switch result {
                 case .success(let groups):
-                    if let matchingGroup = groups.first(where: { $0.name.contains(studentGroupName) || $0.name == studentGroupName }) {
-                        self.groupId = matchingGroup.id
+                    // Сопоставляем группу, обрезая дополнительную информацию в скобках.
+                    if let matchingGroup = groups.first(where: { group in
+                        // Разделяем имя по строке " (" и берем первую часть
+                        let trimmedName = group.name.components(separatedBy: " (").first ?? group.name
+                        return trimmedName == studentGroupName
+                    }) {
+                        self.groupId = String(matchingGroup.id)
+                        print("Информация получена \(self.groupId)")
                         self.fetchSchedule()
                     } else {
                         self.errorMessage = "Не найдена группа для студента: \(studentGroupName)"
@@ -96,6 +104,19 @@ class OrioksViewModel: ObservableObject {
                     self.schedule = schedule
                 case .failure(let error):
                     self.errorMessage = "Ошибка получения расписания: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+    func fetchTimetable() {
+        guard let token = token else { return }
+        APIManager.getTimetable(token: token) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let timetable):
+                    self.timetable = timetable
+                case .failure(let error):
+                    self.errorMessage = "Ошибка получения таймтейбла: \(error.localizedDescription)"
                 }
             }
         }
