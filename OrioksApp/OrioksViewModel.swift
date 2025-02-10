@@ -4,11 +4,17 @@ import Combine
 class OrioksViewModel: ObservableObject {
     @Published var isAuthenticated = false
     @Published var token: String? = nil
+    @Published var newSchedule: ScheduleResponse? = nil
+    @Published var transformedSchedule: TransformedSchedule? = nil
+    @Published var scheduleMeta: ScheduleMeta? = nil
     @Published var schedule: GroupSchedule? = nil
     @Published var errorMessage: String? = nil
     @Published var timetable: [String: [String]]? = nil
     @Published var groupId: String = ""
     @Published var studentInfo: Student? = nil
+    @Published var currentWeek: Int = 0
+    @Published var currentWeekType: Int = 0
+    
     
     init() {
         // При запуске пытаемся загрузить токен из Keychain
@@ -17,7 +23,6 @@ class OrioksViewModel: ObservableObject {
             self.token = storedToken
             self.isAuthenticated = true
             self.fetchStudentInfo()
-            self.fetchTimetable()
         }
     }
     
@@ -32,7 +37,6 @@ class OrioksViewModel: ObservableObject {
                         KeychainHelper.standard.save(tokenData, service: "com.orioks.app", account: "userToken")
                     }
                     self.fetchStudentInfo()
-                    self.fetchTimetable()
                 case .failure(let error):
                     self.errorMessage = "Ошибка авторизации: \(error.localizedDescription)"
                 }
@@ -48,7 +52,6 @@ class OrioksViewModel: ObservableObject {
             KeychainHelper.standard.save(tokenData, service: "com.orioks.app", account: "userToken")
         }
         self.fetchStudentInfo()
-        self.fetchTimetable()
     }
     
     /// Запрос информации о студенте
@@ -60,8 +63,9 @@ class OrioksViewModel: ObservableObject {
                 case .success(let student):
                     self.studentInfo = student
                     // Далее сопоставляем группу (используя student.group)
-                    self.fetchGroupsAndSetGroupId(for: student.group)
+                    //self.fetchGroupsAndSetGroupId(for: student.group)
                     print("Информация получена \(student.group)")
+                    self.fetchNewSchedule()
                 case .failure(let error):
                     print("Ошибка получения информации о студенте: \(error.localizedDescription)")
                 }
@@ -69,7 +73,51 @@ class OrioksViewModel: ObservableObject {
         }
     }
     
-    /// Запрашиваем список групп и сопоставляем имя студента с именем группы
+    func fetchScheduleMeta() {
+        guard let token = token else { return }
+        APIManager.getScheduleMeta(token: token) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let meta):
+                    self.scheduleMeta = meta
+                    // Вычисляем текущую неделю и тип недели на основе meta.semester_start
+                    let formatter = DateFormatter()
+                    formatter.dateFormat = "yyyy-MM-dd"
+                    if let semesterStartDate = formatter.date(from: meta.semester_start) {
+                        let now = Date()
+                        let days = Calendar.current.dateComponents([.day], from: semesterStartDate, to: now).day ?? 0
+                        let week = (days / 7) + 1
+                        self.currentWeek = week
+                        self.currentWeekType = (week - 1) % 4
+                    }
+                case .failure(let error):
+                    self.errorMessage = "Ошибка получения мета расписания: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+    
+    func fetchNewSchedule() {
+        print("вызов fetchNewSchedule")
+        guard let groupName = studentInfo?.group, !groupName.isEmpty else {
+            self.errorMessage = "Информация о группе отсутствует"
+            return
+        }
+        
+        APIManager.getScheduleData(groupName: groupName) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let scheduleResponse):
+                    self.newSchedule = scheduleResponse
+                    // Преобразуем расписание
+                    self.transformedSchedule = transformSchedule(from: scheduleResponse)
+                    self.fetchScheduleMeta()
+                case .failure(let error):
+                    self.errorMessage = "Ошибка получения расписания: \(error.localizedDescription)"
+                }
+            }
+        }
+    }    /*/// Запрашиваем список групп и сопоставляем имя студента с именем группы
     func fetchGroupsAndSetGroupId(for studentGroupName: String) {
         guard let token = token else { return }
         APIManager.getGroups(token: token) { result in
@@ -93,8 +141,8 @@ class OrioksViewModel: ObservableObject {
                 }
             }
         }
-    }
-    
+    }*/
+    /*
     func fetchSchedule() {
         guard let token = token, !groupId.isEmpty else { return }
         APIManager.getSchedule(token: token, groupId: groupId) { result in
@@ -120,5 +168,5 @@ class OrioksViewModel: ObservableObject {
                 }
             }
         }
-    }
+    }*/
 }

@@ -23,7 +23,7 @@ extension APIError: LocalizedError {
     }
 }
 
-func transformSchedule(from items: [ScheduleItem]) -> GroupSchedule {
+/* func transformSchedule(from items: [ScheduleItem]) -> GroupSchedule {
     // Массив с названиями дней недели (английскими именами в нижнем регистре)
     let dayNames = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
     
@@ -71,7 +71,7 @@ func transformSchedule(from items: [ScheduleItem]) -> GroupSchedule {
     let now = ISO8601DateFormatter().string(from: Date())
     
     return GroupSchedule(lastUpdated: now, semester: "", weeks: weeks)
-}
+}*/
 
 struct APIManager {
     // Базовый URL изменён на требуемый адрес
@@ -154,7 +154,96 @@ struct APIManager {
             }
         }.resume()
     }
-    /// Запрос времени начала и конца всех пар
+    /// Получает расписание для заданной группы.
+    /// - Parameters:
+    ///   - groupName: Имя группы (например, "М-14М").
+    ///   - completion: Результат запроса с объектом ScheduleResponse или ошибкой.
+    static func getScheduleData(groupName: String, completion: @escaping (Result<ScheduleResponse, Error>) -> Void) {
+        guard let url = URL(string: "https://www.miet.ru/schedule/data") else {
+            completion(.failure(APIError.invalidURL))
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/x-www-form-urlencoded; charset=UTF-8", forHTTPHeaderField: "Content-Type")
+        
+        // Формируем тело запроса (URLEncoded)
+        let bodyString = "group=\(groupName)"
+        print("отправляем ззапрос\(request)")
+        request.httpBody = bodyString.data(using: .utf8)
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("Ошибка запроса расписания: \(error)")
+                completion(.failure(error))
+                return
+            }
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200...299).contains(httpResponse.statusCode),
+                  let data = data else {
+                print("Некорректный ответ от сервера")
+                completion(.failure(APIError.invalidResponse))
+                return
+            }
+            
+            // Для отладки выводим полученный JSON-ответ
+            if let jsonStr = String(data: data, encoding: .utf8) {
+                print("Полученный JSON:\n\(jsonStr)")
+            }
+            
+            let decoder = JSONDecoder()
+            // Настраиваем стратегию декодирования дат с помощью собственного форматтера.
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+            decoder.dateDecodingStrategy = .formatted(formatter)
+            
+            do {
+                let scheduleResponse = try decoder.decode(ScheduleResponse.self, from: data)
+                completion(.success(scheduleResponse))
+            } catch {
+                print("Ошибка декодирования расписания: \(error)")
+                completion(.failure(error))
+            }
+        }.resume()
+    }
+    
+    static func getScheduleMeta(token: String, completion: @escaping (Result<ScheduleMeta, Error>) -> Void) {
+        guard let url = URL(string: "\(baseURL)/api/v1/schedule") else {
+            completion(.failure(APIError.invalidURL))
+            return
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let userAgent = "orioks_api_test/0.1 iOS \(UIDevice.current.systemVersion)"
+        request.addValue(userAgent, forHTTPHeaderField: "User-Agent")
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("Ошибка запроса мета расписания: \(error)")
+                completion(.failure(error))
+                return
+            }
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200...299).contains(httpResponse.statusCode),
+                  let data = data else {
+                print("Некорректный ответ от сервера (meta)")
+                completion(.failure(APIError.invalidResponse))
+                return
+            }
+            do {
+                let meta = try JSONDecoder().decode(ScheduleMeta.self, from: data)
+                completion(.success(meta))
+            } catch {
+                print("Ошибка декодирования мета расписания: \(error)")
+                completion(.failure(error))
+            }
+        }.resume()
+    }
+    /// Запрос времени начала и конца всех пар НЕНУЖНО
+    /*
     static func getTimetable(token: String, completion: @escaping (Result<[String: [String]], Error>) -> Void) {
         guard let url = URL(string: "\(baseURL)/api/v1/schedule/timetable") else {
             print("Ошибка: Неверный URL для таймтейбла")
@@ -195,41 +284,9 @@ struct APIManager {
                 completion(.failure(error))
             }
         }.resume()
-    }
-    /// Запрос расписания для конкретной группы
-//    static func getSchedule(token: String, groupId: String, completion: @escaping (Result<GroupSchedule, Error>) -> Void) {
-//        guard let url = URL(string: "\(baseURL)/api/v1/schedule/groups/\(groupId)") else {
-//            completion(.failure(APIError.invalidURL))
-//            return
-//        }
-//        var request = URLRequest(url: url)
-//        request.httpMethod = "GET"
-//        request.addValue("application/json", forHTTPHeaderField: "Accept")
-//        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-//        let userAgent = "orioks_api_test/0.1 iOS \(UIDevice.current.systemVersion)"
-//        request.addValue(userAgent, forHTTPHeaderField: "User-Agent")
-//        
-//        URLSession.shared.dataTask(with: request) { data, response, error in
-//            if let error = error {
-//                completion(.failure(error))
-//                return
-//            }
-//            guard let httpResponse = response as? HTTPURLResponse else {
-//                completion(.failure(APIError.invalidResponse))
-//                return
-//            }
-//            guard (200...299).contains(httpResponse.statusCode), let data = data else {
-//                completion(.failure(APIError.httpError(code: httpResponse.statusCode)))
-//                return
-//            }
-//            do {
-//                let scheduleResponse = try JSONDecoder().decode(GroupSchedule.self, from: data)
-//                completion(.success(scheduleResponse))
-//            } catch {
-//                completion(.failure(error))
-//            }
-//        }.resume()
-//    }
+    }*/
+    //НЕНУЖНО
+    /*
     static func getSchedule(token: String, groupId: String, completion: @escaping (Result<GroupSchedule, Error>) -> Void) {
         guard let url = URL(string: "\(baseURL)/api/v1/schedule/groups/\(groupId)") else {
             print("Ошибка: Неверный URL")
@@ -280,7 +337,7 @@ struct APIManager {
             }
         }.resume()
     }
-    /// Запрос списка групп
+    /// Запрос списка групп НЕНУЖНО
     static func getGroups(token: String, completion: @escaping (Result<[GroupInfo], Error>) -> Void) {
         guard let url = URL(string: "\(baseURL)/api/v1/schedule/groups") else {
             completion(.failure(APIError.invalidURL))
@@ -313,5 +370,5 @@ struct APIManager {
                 completion(.failure(error))
             }
         }.resume()
-    }
+    }*/
 }
