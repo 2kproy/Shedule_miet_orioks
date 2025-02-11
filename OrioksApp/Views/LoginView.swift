@@ -8,7 +8,7 @@ struct LoginView: View {
     @State private var tokenInput: String = ""
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 20) {
                 Text("Вход в ОРИОКС")
                     .font(.largeTitle)

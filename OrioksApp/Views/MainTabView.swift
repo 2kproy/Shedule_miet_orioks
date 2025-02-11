@@ -24,7 +24,7 @@ struct MainTabView: View {
                 }
         }
         // Отслеживаем изменение ошибки в viewModel
-        .onChange(of: viewModel.errorMessage) { newValue in
+        .onChange(of: viewModel.errorMessage) { newValue, _ in
             if newValue != nil {
                 showingErrorAlert = true
             }

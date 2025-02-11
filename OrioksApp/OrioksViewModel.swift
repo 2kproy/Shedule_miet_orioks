@@ -86,7 +86,7 @@ class OrioksViewModel: ObservableObject {
                     if let semesterStartDate = formatter.date(from: meta.semester_start) {
                         let now = Date()
                         let days = Calendar.current.dateComponents([.day], from: semesterStartDate, to: now).day ?? 0
-                        let week = (days / 7) + 1
+                        let week = ((days + 1) / 7) + 1
                         self.currentWeek = week
                         self.currentWeekType = (week - 1) % 4
                     }
